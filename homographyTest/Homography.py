@@ -1,0 +1,622 @@
+# -*- coding: utf-8 -*-
+# @Author: Jiarui Wang(Jill)
+# @Date:   2019-06-08 11:42:26
+# @E-mail: e0386397@u.nus.edu
+# @Last Modified time: 2019-06-27 14:59:30
+import cv2 as cv 
+import numpy as np 
+import sys
+import math
+import operator
+import scipy
+import matplotlib.pyplot as plt
+from numpy.linalg import lstsq
+from numpy.linalg import inv
+from scipy.spatial import Delaunay
+########################################################################
+#################################################################
+# This is for estimating area in real world according to image. 
+# By building homography martrix
+################################################################
+########################################################################
+
+img = cv.imread(sys.argv[1])
+resizeAspect = 2
+global min_x, min_y, width, height, point1, point2
+global ROI
+########################################################################
+# Use image processing to find L ruler's corner pixel coordinate
+########################################################################
+def getPixelCoordinateList():
+	global min_x, min_y, width, height
+	global ROI
+	gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+	gray = cv.GaussianBlur(gray, (5,5),0)
+
+# 因为这一块选点perform不好，所以暂且comment掉
+	# # select region of interest, so that corner detection can be more accurate
+	# cv.namedWindow('img', cv.WINDOW_NORMAL)
+	# cv.resizeWindow('img', int(img.shape[1]/resizeAspect), int(img.shape[0]/resizeAspect))
+	# cv.setMouseCallback('img', on_mouse)
+	# cv.imshow('img', img)
+	# cv.waitKey(0)
+	# print("get region of interest ...")
+	# ROI = gray[min_y:min_y+height, min_x:min_x+width]
+	# print("Shi Tomasi corner detector ...")
+
+
+	# # use Shi Tomasi corner detector
+	# points = cv.goodFeaturesToTrack(ROI, 43, 0.01, 10)
+	# points = np.int0(points)
+	# corners = []
+	# img2 = img.copy()
+	# for i in points:
+	# 	x, y = i.ravel()
+	# 	corners.append((min_x+x, min_y+y))
+	#	cv.circle(img2, (min_x+x, min_y+y), 3, (0,0,255), -1 )
+# 因为上一块选点perform不好，所以暂且comment掉
+
+
+
+
+	# use harris detector 
+	#gray = np.float32(gray)
+	# dst = cv.cornerHarris(gray, 2, 3, 0.04)
+	# corners = []
+	# value = 0.05*dst.max()
+	# for y in range(0, img.shape[0]):
+	# 	for x in range(0, img.shape[1]):
+	# 		if (dst[y, x] > value):
+	# 			corners.append((x, y))
+	# 			cv.circle(img, (x, y), 5, [0,0,255], -1)
+	# print("corners", corners)
+	# print("number of corners", len(corners))	
+
+
+
+	# use fast detector to detect corners
+	# fast = cv.FastFeatureDetector_create()
+	# fast.setThreshold(30)
+	# kp = fast.detect(gray, None)
+	# img2 = cv.drawKeypoints(img, kp, None, color = (0, 0, 255))
+	# print( "Threshold: {}".format(fast.getThreshold()) )
+	# print( "nonmaxSuppression:{}".format(fast.getNonmaxSuppression()) )
+	# print( "neighborhood: {}".format(fast.getType()) )
+	# print( "Total Keypoints with nonmaxSuppression: {}".format(len(kp)) )
+	# corners = [kp1.pt for kp1 in kp]
+
+# 因为上一块选点perform不好，所以暂且comment掉
+	# perform NMS and points selection to reduce useless points
+	# lines = findRulerCorners(corners)
+# 因为上一块选点perform不好，所以暂且comment掉
+
+
+	lines = []
+	lines.append([(247, 585), (252, 704), (256, 825), (259, 884), (243, 523), (250, 640), (237, 352), (241, 467), (254, 761), (239, 406)])
+	lines.append([(316, 821), (318, 880), (307, 637), (313, 757), (292, 350), (297, 465), (310, 701), (300, 520), (304, 582), (295, 403)])
+	lines.append([(904, 986), (794, 992), (667, 1004), (489, 1015), (849, 990), (609, 1007), (546, 1011), (730, 999), (425, 1021), (366, 1025)])
+	lines.append([(363, 961), (422, 962), (484, 959), (547, 954), (608, 948), (664, 941), (726, 942), (787, 939), (846, 932), (901, 929)])
+	# arrange the points into sequence. According to the distance from corner to the pointd
+
+	lines = sortLinesPoints(lines)
+
+
+	pixelCoordinates = []
+	for line in lines:
+		for point in line:
+			pixelCoordinates.append([point[0], point[1]])
+	return pixelCoordinates
+
+
+
+########################################################################
+# Sign real coordinates to corners
+########################################################################
+def getRealCoordinateList():
+	patternPoints = []
+	for i in range(0,10):
+		patternPoints.append([0, 25+10*i, 0])
+
+	for i in range(0,10):
+		patternPoints.append([10, 25+10*i, 0])
+
+	for i in range(0,10):
+		patternPoints.append([15+10*i, 10, 0])
+
+	for i in range(0,10):
+		patternPoints.append([15+10*i, 0, 0])
+
+	return patternPoints
+
+########################################################################
+# Use Ap=b to calculate homography matrix
+########################################################################
+def calculatehomographyMatrix(pixelList, realList):
+	# Get matrix A from pixel(u,v) and real (x,y)
+	A = []
+	b = []
+	length =  len(pixelList)
+	for i in range(0, length):
+		u = pixelList[i][0]
+		v = pixelList[i][1]
+		x = realList[i][0]
+		y = realList[i][1]
+		A.append([x, y, 1, 0, 0, 0, -1*u*x, -1*u*y])
+		b.append([u])
+	for i in range(0, length):
+		u = pixelList[i][0]
+		v = pixelList[i][1]
+		x = realList[i][0]
+		y = realList[i][1]
+		A.append([0, 0, 0, x, y, 1, -1*v*x, -1*v*y])
+		b.append([v])
+
+	A = np.array(A)
+	b = np.array(b)
+	p, residuals, rank, sv = np.linalg.lstsq(A, b, -1)
+
+
+	homography = [ [p[0][0], p[1][0], p[2][0]],
+				   [p[3][0], p[4][0], p[5][0]],
+				   [p[6][0], p[7][0], 1]]
+	homography = np.array(homography)
+
+	return homography
+
+
+
+
+
+
+
+########################################################################
+# Find countours of detected shape
+########################################################################
+def findContourPoints():
+	points = np.array([[784, 938],
+					  [726, 942],
+					  [732, 1002]])
+
+	return points
+
+########################################################################
+# Calculate contour Area.
+########################################################################
+def calculateContourArea(pixelPoints, homography):
+	realPoints = []
+	# Get triangles
+	for point in pixelPoints:
+		p = np.array([point[0], point[1], 1])
+		print(p)
+		temp, residuals, rank, sv = lstsq(homography, p, -1)
+		print(temp)
+		x = temp[0]
+		y = temp[1]
+		z = temp[2]
+		realPoints.append([(x/z), (y/z)])
+
+	realPoints = np.array(realPoints)
+	tri = Delaunay(realPoints)
+	print("----test----, calculateContourArea, point is \n",realPoints)
+	print("----test----, calculateContourArea, tri.simplices is \n", tri.simplices)
+	print("----test----, points, tri.simplices is \n", realPoints[tri.simplices])
+	print("----test----,pixelPoints[:,1]", realPoints[:,1])
+	plt.triplot(realPoints[:,0], realPoints[:,1], tri.simplices.copy())
+	plt.plot(realPoints[:,0], realPoints[:,1], 'o')
+	plt.show()
+
+	# Calculate the area
+	totalArea = 0
+	for triangle in realPoints[tri.simplices]:
+		print("----test----,triangle is ", triangle)
+		totalArea  += triArea(triangle)
+
+	print("----test----, total area is ", totalArea )
+	return totalArea
+########################################################################
+# The aim of this function is to test, whether homography is correct.
+# Input pixel points is in the form pixelCoordinates[i] = [[x], [y], [1]].
+# There will be an image showing the real coordinates. You can print to
+# manually check
+########################################################################
+def correctnessTest(pixelPoints, homography):
+	realPoints = []
+	for point in pixelPoints:
+		point = np.array(point)
+		temp, residuals, rank, sv = lstsq(homography, point, -1)
+		x = temp[0][0]
+		y = temp[1][0]
+		z = temp[2][0]
+		realPoints.append((int(x/z), int(y/z)))
+	temp = np.zeros([200, 200,3], dtype = np.uint8)
+	temp.fill(255)
+	#这里出现的图形，和我平时纸上画的是上下颠倒的，但是没有关系，只要形状对了就可以
+	for point in realPoints:
+		cv.circle(temp, (int(point[0]),int(point[1])), 5, (0,0,255), -1 )
+	cv.imshow('temp', temp)
+	cv.waitKey(0)			
+	return
+
+########################################################################
+# Given sortedCorner(pixel coordinates) and patternPoints(real coordinate)
+# To calculate calibration matrix
+########################################################################
+def calculateCalibration(sortedCorners, patternPoints):
+	camera_matrix = np.zeros((3, 3),'float32')
+	height = img.shape[0]
+	weight = img.shape[1]
+	focal = 19
+	camera_matrix[0,0]= weight/focal
+	camera_matrix[1,1]= height/focal
+	camera_matrix[2,2]= 1.0
+	camera_matrix[0,2]= img.shape[1]/2
+	camera_matrix[1,2]= img.shape[0]/2
+
+	dist_coefs = np.zeros(0,'float32')
+	patternPoints = np.array(patternPoints, 'float32') 
+	sortedCorners = np.array(sortedCorners, 'float32') 
+	rms, camera_matrix, dist_coefs, rvecs, tvecs = cv.calibrateCamera([patternPoints], [sortedCorners], (img.shape[1],img.shape[0]),camera_matrix,dist_coefs,flags=cv.CALIB_USE_INTRINSIC_GUESS)
+	return rms, camera_matrix, dist_coefs, rvecs, tvecs
+
+
+
+########################################################################
+# Perform NMS to reduce useless points. (clustered together)
+########################################################################
+def NMS(corners):
+
+	return
+
+########################################################################
+# Find 50 points on ruler, and cut all the other non-important thing
+########################################################################
+def findRulerCorners(corners):
+	lines = []
+	for i in range(0, len(corners)):
+		for j in range(i, len(corners)):
+			abandon = False
+			pointsNo, fittedPoints = pointsFitting(corners, corners[i], corners[j])
+			for point in fittedPoints:
+				if cornerInLines(point, lines):
+					abandon = True
+			if (pointsNo == 10 and not abandon):
+				print("----test----", pointsNo)
+				print("----test----", fittedPoints)
+				lines.append(fittedPoints)
+
+	print("----test----", "length of line is")
+	print(len(lines))
+
+	print("----test----")
+	for line in lines:
+		img1 = img.copy()
+		x1 = int(line[0][0])
+		y1 = int(line[0][1])
+		x2 = int(line[9][0])
+		y2 = int(line[9][1])
+		cv.line(img1, (x1, y1), (x2, y2), (0, 0, 225), 5)
+		cv.namedWindow('img1', cv.WINDOW_NORMAL)
+		cv.resizeWindow('img1', int(img.shape[1]/resizeAspect), int(img.shape[0]/resizeAspect))
+		cv.imshow('img1', img1)
+		cv.waitKey(0)
+		cv.destroyAllWindows()
+	if (len(lines) == 4):
+		print("Successfully located 50 ruler points ...")
+		return lines
+	else:
+		print("Error occurs when perform findRulerCorners ...")
+		return lines
+
+########################################################################
+# Decide whether corner exists in lines
+########################################################################
+def cornerInLines(corner, lines):
+	for line in lines:
+		if corner in line:
+			return True
+	return False
+
+
+########################################################################
+# Test how many points are on the line AB among corners.
+########################################################################
+def pointsFitting(corners, A, B):
+	count = 0
+	fittedPoints = []
+	Ax = A[0]
+	Ay = A[1]
+	Bx = B[0]
+	By = B[1]
+	for i in range(0, len(corners)):
+		corner = corners[i]
+		x = corner[0]
+		y = corner[1]
+		# if the slope is infinity
+		if (Ax - Bx == 0 and almostEqual_Slope(x, Ax)):
+			fittedPoints.append((x,y))
+			count += 1
+		# for AB with normal slope
+		elif (Ax - Bx != 0 and almostEqual_Slope(y - Ay, (x - Ax) * ((By - Ay) / (Bx - Ax))) ):
+			fittedPoints.append((x,y))
+			count += 1
+	return count, fittedPoints
+
+
+########################################################################
+# Instead of euqal, set a loose equal to compare whether A == B
+########################################################################
+def almostEqual_Slope(A, B):
+	min_aspect = 0.95
+	max_aspect = 1.05
+	if(A >= B * min_aspect and A <= B * max_aspect):
+		return True
+	else:
+		return False
+
+
+def on_mouse(event, x, y, flags, param):
+	img2 = img.copy()
+	global min_x, min_y, width, height, point1, point2
+	global ROI
+	if event == cv.EVENT_LBUTTONDOWN:
+		point1 = (x,y)
+		cv.circle(img2, point1, 10, (0,255,0), 5)
+		cv.imshow('img',img2)
+	elif event == cv.EVENT_MOUSEMOVE and (flags & cv.EVENT_FLAG_LBUTTON):
+		cv.rectangle(img2, point1, (x, y),(255, 0, 0), 5)
+		cv.imshow('img',img2)
+	elif event == cv.EVENT_LBUTTONUP:
+		point2 = (x,y)
+		cv.rectangle(img2, point1, point2, (0,0,255), 5)
+		cv.imshow('img', img2)
+		min_x = min(point1[0],point2[0])     
+		min_y = min(point1[1],point2[1])
+		width = abs(point1[0] - point2[0])
+		height = abs(point1[1] -point2[1])
+
+########################################################################
+# For 4 lines, 10 points on one line. We need to arrange these 10 points
+# in sequence, according sequenc.jpg
+########################################################################
+def sortLinesPoints(lines):
+	# select 6 intersection points of 4 lines( 2 points should be infinity )
+	lineVectors = []
+	intersections = []
+	distances = []
+	for line in lines:
+		vx, vy, cx, cy = cv.fitLine(np.float32(line), cv.DIST_L2, 0, 0.01, 0.01)
+		lineVectors.append([(vx, vy), (cx, cy)])
+		line_img = img.copy()
+		cv.line(line_img, (int(cx-vx*4000),int(cy-vy*4000)), (int(cx+vx*4000), int(cy+vy*4000)), (0,0,255))
+		cv.namedWindow('line_img', cv.WINDOW_NORMAL)
+		cv.resizeWindow('line_img', int(img.shape[1]/resizeAspect), int(img.shape[0]/resizeAspect))
+		cv.imshow('line_img', line_img)
+		cv.waitKey(0)
+	for i in range(0, len(lineVectors)):
+		for j in range(i, len(lineVectors)):
+			R = intersection(lineVectors[i], lineVectors[j])
+			if R:
+				if (not isRInfinity(R)):
+					intersections.append((float(R[0]), float(R[1])))
+					distances.append(calculateDistance(lines[i], lines[j], R))
+
+	#step 2 计算交点与lines之间所有点的距离差，最大是D，最小是B
+	maxDis = float(0)
+	maxIndex = 0
+	minDis = float("inf")
+	minIndex = 0
+	for i in range(0, len(distances)):
+		if (float(distances[i][3]) > maxDis):
+			maxDis = distances[i][3]
+			maxIndex = i
+		if (float(distances[i][3]) < minDis):
+			minDis = distances[i][3]
+			minIndex = i 
+	D = distances[maxIndex][2]
+	B = distances[minIndex][2]
+
+
+	#step 3 分出lOne, lTwo, lThree, lFour, 注意，这里的XY轴和平时的不一样，所以cross正负对应是反的
+	DB = np.array([float(B[0]-D[0]), float(B[1]-D[1]), 0])
+	line1 = distances[maxIndex][0]
+	vector1 = np.array([float(line1[0][0]-D[0]), float(line1[0][1]-D[1]), 0])
+	crossProduct = np.cross(DB, vector1)
+
+	if crossProduct[2] < 0:
+		lineOne = distances[maxIndex][0]
+		lineFour = distances[maxIndex][1]
+	else:
+		lineOne = distances[maxIndex][1]
+		lineFour = distances[maxIndex][0]
+	line3 = distances[minIndex][0]
+	vector3 = np.array([float(line3[0][0]-B[0]), float(line3[0][1]-B[1]), 0])
+	crossProduct = np.cross(DB, vector3)
+	if crossProduct[2] < 0:
+		lineTwo = distances[minIndex][0]
+		lineThree = distances[minIndex][1]
+	else:
+		lineTwo = distances[minIndex][1]
+		lineThree = distances[minIndex][0]
+
+
+	# print("----test----", "sequence of four lines")
+	# temp = img.copy()
+	# cv.line(temp, lineOne[0], lineOne[3], (0,0,255))
+	# cv.line(temp, lineTwo[0], lineTwo[3], (0,255,0))
+	# cv.line(temp, lineThree[0], lineThree[3], (255,0,0))
+	# cv.line(temp, lineFour[0], lineFour[3], (255,255,255))
+	# cv.namedWindow('sequenceChecking', cv.WINDOW_NORMAL)
+	# cv.resizeWindow('sequenceChecking', int(img.shape[1]/resizeAspect), int(img.shape[0]/resizeAspect))
+	# cv.imshow('sequenceChecking', temp)
+	# cv.waitKey(0)
+
+	# step four 把四条线中的点，按照关系排列组合
+	lines = [lineOne, lineTwo, lineThree, lineFour]
+	pointsDistance = {}
+	for i in range(0, 4):
+		line = lines[i]
+		for point in line:
+			pointsDistance[point] = int(euclideanDistance(D, point))
+		lines[i][:] = []
+		for key, value in sorted(pointsDistance.items(), key = operator.itemgetter(1)):
+			lines[i].append(key)
+		pointsDistance.clear()
+	temp = img.copy()
+
+
+	return lines
+
+
+
+########################################################################
+# Given two lines A and B, to detect their intersection point
+########################################################################
+def intersection(A, B):
+	Avx = A[0][0]
+	Avy = A[0][1]
+	Acx = A[1][0]
+	Acy = A[1][1]
+	Bvx = B[0][0]
+	Bvy = B[0][1]
+	Bcx = B[1][0]
+	Bcy = B[1][1]
+	A1 = (Acx-Avx*2000, Acy-Avy*2000)
+	A2 = (Acx+Avx*2000, Acy+Avy*2000)
+	B1 = (Bcx-Bvx*2000, Bcy-Bvy*2000)
+	B2 = (Bcx+Bvx*2000, Bcy+Bvy*2000)
+
+	# L1 = [A1[1] - A2[1], A2[0] - A1[0], -(A1[0]*A2[1] - A2[0]*A1[1])]
+	# L2 = [B1[1] - B2[1], B2[0] - B1[0], -(B1[0]*B2[1] - B2[0]*B1[1])]
+
+	# D  = L1[0] * L2[1] - L1[1] * L2[0]
+	# Dx = L1[2] * L2[1] - L1[1] * L2[2]
+	# Dy = L1[0] * L2[2] - L1[2] * L2[0]
+
+	# if D != 0:
+	# 	x = Dx / D
+	# 	y = Dy / D
+	# 	temp = img.copy()
+	# 	cv.line(temp, A1, A2, (0,0,255))
+	# 	cv.line(temp, B1, B2, (0,0,255))
+	# 	cv.circle(temp, (x, y), 3, (0,0,255), -1 )
+	# 	cv.namedWindow('temp', cv.WINDOW_NORMAL)
+	# 	cv.resizeWindow('temp', int(img.shape[1]/resizeAspect), int(img.shape[0]/resizeAspect))
+	# 	cv.imshow('temp', temp)
+	# 	cv.waitKey(0)
+	# 	return x,y
+	# else:
+	# 	return False
+
+	N1 = Avy/Bvy - Avx/Bvx
+	N2 = (Acx-Bcx)/Bvx - (Acy-Bcy)/Bvy
+
+	M1 = Bvx/Avx - Bvy/Avy
+	M2 = (Bcy-Acy)/Avy - (Bcx-Acx)/Avx
+	if (N1 == 0):
+		return False
+	else:
+		t = M2/M1
+		x = t*Bvx+Bcx
+		y = t*Bvy+Bcy
+		return (x, y)
+
+########################################################################
+# Given point R, whether this is out of image shape
+########################################################################
+def isRInfinity(R):
+	height = img.shape[0]
+	width = img.shape[1]
+	if (int(R[0]) > width or int(R[1]) > height or R[0] < 0 or R[1]<0):
+		return True
+	return False
+
+########################################################################
+# Given line A and line B, their intersection R, return distance between
+# R and line points. (and these two lines)
+########################################################################
+def calculateDistance(A, B, R):
+	dis = 0
+	for point in A:
+		dis += math.sqrt((point[0] - R[0])**2 + (point[1] - R[1])**2)
+	for point in B:
+		dis += math.sqrt((point[0] - R[0])**2 + (point[1] - R[1])**2)
+	return A, B, R, dis
+
+
+########################################################################
+# Get euclidean Distance between A and B
+########################################################################
+def euclideanDistance(pointA, pointB):
+	dist = math.sqrt((pointB[0] - pointA[0])**2 + (pointB[1] - pointA[1])**2)
+	return dist 
+
+
+########################################################################
+# Calculate the area given three coordinates
+# input is like 
+# [[72.18761378 59.06871943]
+# [37.96444783 35.71516127]
+# [95.18101714 13.02890558]]
+########################################################################
+def triArea(triangle):
+	x1 = triangle[0][0]
+	y1 = triangle[0][1]
+	x2 = triangle[1][0]
+	y2 = triangle[1][1]
+	x3 = triangle[2][0]
+	y3 = triangle[2][1]
+
+	area = ((x2 - x1)*(y3 - y1) - (x3 - x1)*(y2 - y1)) / 2
+	return area
+
+
+########################################################################
+# Get the pixel by mouse clicking
+########################################################################
+def getPixelCoordinateListByMouse():
+
+def main():
+
+	print("Get pixel coordinates of corners...")
+	#pixelCoordinates = getPixelCoordinateList()
+	pixelCoordinates = getPixelCoordinateListByMouse()
+	print("Successfully get pixel coordinates, shown as bellow: ")
+	print(pixelCoordinates)
+
+	print("Get real coordinates of corners ...")
+	realCoordinates = getRealCoordinateList()
+	print("Successfully get real coordinates, shown as bellow:")
+	print(realCoordinates)
+
+	print("Calculate homography matrix ...")
+	homography =  calculatehomographyMatrix(pixelCoordinates, realCoordinates)
+	print("Successfully get homography matrix, shown as bellow:")
+	print(homography)
+
+	print("Get countours from image ...")
+	targetPoints = findContourPoints()
+	print("Successfully get the countours coordinates, shown as bellow:")
+	print(targetPoints)
+
+
+	print("Calculate the countour area ...")
+	area = calculateContourArea(targetPoints, homography)
+	print("Successfully get the area, shown as bellow")
+	print("area is", area)
+	# print("Test the avalibility of calibration model ...")
+	# rms, camera_matrix, dist_coefs, rvecs, tvecs = calculateCalibration(pixelCoordinates, realCoordinates)
+	# print("Successfully get calibration, shown as bellow")
+	# print("\nRMS:", rms)
+	# print("camera matrix:\n", camera_matrix)
+	# print("distortion coefficients: \n", dist_coefs.ravel())
+	# print("rotation vector:\n ", rvecs)
+	# print("translation vector:\n ", tvecs)
+
+
+	print("read image")
+
+
+
+
+if __name__ == '__main__':
+    main()
