@@ -1,0 +1,14 @@
+# 
+# Wavefront material file
+# Created with AliceVision
+# 
+
+
+newmtl TextureAtlas_0
+Ka  0.6 0.6 0.6
+Kd  0.6 0.6 0.6
+Ks  0.0 0.0 0.0
+d  1.0
+Ns  0.0
+illum 2
+map_Kd texture_0.png
