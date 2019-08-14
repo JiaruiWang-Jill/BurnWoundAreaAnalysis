@@ -452,26 +452,14 @@ def subpix(img, quads):
 	patternPoints = []
 	#correspond each image coordinate with real coordinate
 	for i in range(0,5):
-#王贾瑞
-		# for j in range(0,2):
-		# 	patternPoints.append([-5, 20*(1+i), 0])
-		# 	patternPoints.append([-5, 20*(1+i)+10, 0])
-		# 	patternPoints.append([5, 20*(1+i)+10, 0])
-		# 	patternPoints.append([5, 20*(1+i), 0])
-#王贾瑞，ps，还原的时候下面四行得去掉
+
 		patternPoints.append([-5, 20*(1+i), 0])
 		patternPoints.append([-5, 20*(1+i)+10, 0])
 		patternPoints.append([5, 20*(1+i)+10, 0])
 		patternPoints.append([5, 20*(1+i), 0])
 
 	for i in range(0,5):
-#王贾瑞
-		# for j in range(0,2):
-		# 	patternPoints.append([10+20*i, 5, 0])
-		# 	patternPoints.append([10+20*i+10, 5, 0])
-		# 	patternPoints.append([10+20*i+10, -5, 0])
-		# 	patternPoints.append([10+20*i, -5, 0])
-#王贾瑞，ps，还原的时候下面四行得去掉
+
 		patternPoints.append([10+20*i, 5, 0])
 		patternPoints.append([10+20*i+10, 5, 0])
 		patternPoints.append([10+20*i+10, -5, 0])
@@ -524,7 +512,6 @@ if __name__ == '__main__':
 	white = th.copy()
 	black = th.copy()
 
-#从这里开始到王贾瑞结束，是要comment掉的
 	quads=[]
 	#fillQuads(white, black, 128, 128, quads)
 	white_thresh = 128
@@ -537,11 +524,7 @@ if __name__ == '__main__':
 	contours, hierarchy = cv.findContours(thresh, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE)
 	GetQuadrangleHypothese(contours, hierarchy, quads, 1, img)
 
-#王贾瑞
-	# ret, thresh = cv.threshold(black, black_thresh, 255, cv.THRESH_BINARY)
-	# contours2, hierarchy2 = cv.findContours(thresh, cv.RETR_CCOMP, cv.CHAIN_APPROX_SIMPLE)
-	# GetQuadrangleHypothese(contours2, hierarchy2, quads, 0, img)
-#王贾瑞
+
 
 	quads.sort()
 #王贾瑞
