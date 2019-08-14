@@ -35,7 +35,6 @@ def getPixelCoordinateList():
 	gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
 	gray = cv.GaussianBlur(gray, (5,5),0)
 
-# 因为这一块选点perform不好，所以暂且comment掉
 	# # select region of interest, so that corner detection can be more accurate
 	# cv.namedWindow('img', cv.WINDOW_NORMAL)
 	# cv.resizeWindow('img', int(img.shape[1]/resizeAspect), int(img.shape[0]/resizeAspect))
@@ -56,9 +55,6 @@ def getPixelCoordinateList():
 	# 	x, y = i.ravel()
 	# 	corners.append((min_x+x, min_y+y))
 	#	cv.circle(img2, (min_x+x, min_y+y), 3, (0,0,255), -1 )
-# 因为上一块选点perform不好，所以暂且comment掉
-
-
 
 
 	# use harris detector 
@@ -87,10 +83,8 @@ def getPixelCoordinateList():
 	# print( "Total Keypoints with nonmaxSuppression: {}".format(len(kp)) )
 	# corners = [kp1.pt for kp1 in kp]
 
-# 因为上一块选点perform不好，所以暂且comment掉
 	# perform NMS and points selection to reduce useless points
 	# lines = findRulerCorners(corners)
-# 因为上一块选点perform不好，所以暂且comment掉
 
 
 	lines = []
